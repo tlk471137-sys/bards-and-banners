@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bard & Banners II: The Grand Tragedies</title>
+    <style>
+        body {
+            background-color: #120904;
+            color: #f5eedc;
+            font-family: 'Georgia', serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        #game-container {
+            background-color: #24140b;
+            border: 4px double #c99a2e;
+            border-radius: 12px;
+            max-width: 650px;
+            width: 100%;
+            padding: 30px;
+            box-shadow: 0 12px 35px rgba(0,0,0,0.8);
+        }
+        h1 {
+            color: #e5b842;
+            text-align: center;
+            margin-top: 0;
+            font-size: 2.2rem;
+            border-bottom: 2px dashed #c99a2e;
+            padding-bottom: 12px;
+            letter-spacing: 1px;
+        }
+        #stats-bar {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            background-color: #361d10;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            font-size: 0.95rem;
+            border: 1px solid #4d2b18;
+            text-align: center;
+        }
+        .stat span {
+            color: #e5b842;
+            font-weight: bold;
+        }
+        #story-text {
+            line-height: 1.7;
+            margin-bottom: 25px;
+            min-height: 120px;
+            font-size: 1.15rem;
+        }
+        #dice-log {
+            background-color: #1c0a02;
+            color: #ff7676;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.95rem;
+            font-weight: bold;
+            border-left: 5px solid #d93838;
+            display: none;
+            box-shadow: inset 0 2px 5px rgba(0,0,0,0.5);
+        }
+        .choice-btn {
+            display: block;
+            width: 100%;
+            background-color: #c99a2e;
+            color: #120904;
+            border: none;
+            padding: 14px;
+            margin-bottom: 12px;
+            border-radius: 6px;
+            font-size: 1.05rem;
+            font-weight: bold;
+            cursor: pointer;
+            text-align: left;
+            transition: all 0.2s ease;
+            box-shadow: 0 3px 6px rgba(0,0,0,0.3);
+        }
+        .choice-btn:hover {
+            background-color: #e5b842;
+            transform: translateX(6px);
+        }
+        .choice-btn:active {
+            transform: scale(0.99);
+        }
+        .inventory-list {
+            font-style: italic;
+            color: #a3b899;
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <h1>⚔️ Bard & Banners II 🎭</h1>
+    
+    <div id="stats-bar">
+        <div class="stat">Class: <span id="char-class">Unknown</span></div>
+        <div class="stat">HP: <span id="char-hp">20/20</span></div>
+        <div class="stat">Items: <span id="char-inv" class="inventory-list">None</span></div>
+    </div>
+
+    <div id="dice-log"></div>
+    <div id="story-text">Loading adventure...</div>
+    <div id="choices-container"></div>
+</div>
+
+<script>
+    // System Configurations
+    const classes = {
+        Bard: { hp: 22, modifier: 'Charisma', bonus: 3, desc: "A smooth-talking lyricist wielding a sharp rapier and sharper wits." },
+        Paladin: { hp: 30, modifier: 'Strength', bonus: 4, desc: "A holy knight bound by an oath, clad in heavy plate armor with a longsword." },
+        Wizard: { hp: 16, modifier: 'Intelligence', bonus: 5, desc: "A master of the arcane arts carrying old scrolls and elemental fury." },
+        Rogue: { hp: 20, modifier: 'Dexterity', bonus: 4, desc: "A shadow walker, expert at stealth, backstabs, and picking locks." }
+    };
+
+    // Live Game State
+    let currentClass = 'Bard';
+    let hp = 22;
+    let maxHp = 22;
+    let inventory = [];
+    let currentState = 'class_select';
+
+    function updateStatsBar() {
+        document.getElementById('char-class').innerText = currentClass;
+        document.getElementById('char-hp').innerText = `${hp}/${maxHp}`;
+        document.getElementById('char-inv').innerText = inventory.length > 0 ? inventory.join(', ') : "None";
+    }
+
+    function addInventory(item) {
+        if (!inventory.includes(item)) {
+            inventory.push(item);
+        }
+        updateStatsBar();
+    }
+
+    function takeDamage(amount) {
+        hp -= amount;
+        if (hp <= 0) {
+            hp = 0;
+            currentState = 'game_over';
+        }
+        updateStatsBar();
+    }
+
+    const storyNodes = {
+        class_select: {
+            text: "Welcome, traveler, to the realm of Dunsinane. Before thou settest forth onto this treacherous stage, thou must choose thy character class:",
+            choices: [
+                { text: "🎭 Bard (High Charisma, Balanced HP)", nextState: 'start', action: () => selectClass('Bard') },
+                { text: "🛡️ Paladin (High Strength, Tanky HP)", nextState: 'start', action: () => selectClass('Paladin') },
+                { text: "🔮 Wizard (High Intelligence, Squishy HP)", nextState: 'start', action: () => selectClass('Wizard') },
+                { text: "🗡️ Rogue (High Dexterity, Deadly Stealth)", nextState: 'start', action: () => selectClass('Rogue') }
+            ]
+        },
+        start: {
+            text: "Thou art traveling through the dark, mist-choked woods of Dunsinane. Heavy fog clings to ancient oaks. Suddenly, three withered crone-witches emerge around a bubbling cauldron! <i>'By the pricking of my thumbs, something wicked this way comes!'</i> one shrieks, pointing directly at thee! Roll for initiative!",
+            choices: [
+                { text: "[STR/DEX Combat] Charge the hags with thy weapon drawn!", nextState: 'combat_witches' },
+                { text: "[CHA Deception] Attempt to break their circle with a smooth, deceptive riddle.", nextState: 'riddle_witches' },
+                { text: "[INT Arcana] Recite a counter-curse to turn their bubbling cauldron against them.", nextState: 'spell_witches' }
+            ]
+        },
+        combat_witches: {
+            rollType: 'Combat (Str/Dex)',
+            dc: 12,
+            getMod: () => ['Paladin','Rogue'].includes(currentClass) ? classes[currentClass].bonus : 1,
+            success: {
+                text: "SUCCESS! Thy steel cuts through the mist! With martial precision, thou strike down the primary crone. The other two howl in grief and vanish into oily smoke, leaving behind a glittering **Vial of Healing Elixir** and a royal **Silver Crested Dagger**.",
+                choices: [
+                    { text: "Loot the clearing and march toward Castle Elsinore.", nextState: 'castle_approach', action: () => { addInventory("Healing Elixir"); addInventory("Silver Dagger"); } }
+                ]
+            },
+            failure: {
+                text: "FAIL! The hags blast green lightning from their gnarled fingers. Thy armor sears with mystical energy. Thou takest 8 damage before they vanish into thin air, cackling mockingly.",
+                choices: [
+                    { text: "Groan, recover thy footing, and limp toward Castle Elsinore.", nextState: 'castle_approach', action: () => takeDamage(8) }
+                ]
+            }
+        },
+        riddle_witches: {
+            rollType: 'Deception (Charisma)',
+            dc: 13,
+            getMod: () => currentClass === 'Bard' ? classes.Bard.bonus : 1,
+            success: {
+                text: "SUCCESS! Thy silver tongue leaves them mesmerized. They weep tears of black bile at thy prose. <i>'O, clever mortal!'</i> they hiss, hand-delivering a **Vial of Healing Elixir** and a secret **Scroll of Prophecy** before melting into the earth.",
+                choices: [
+                    { text: "Take their strange gifts and proceed to Castle Elsinore.", nextState: 'castle_approach', action: () => { addInventory("Healing Elixir"); addInventory("Scroll of Prophecy"); } }
+                ]
+            },
+            failure: {
+                text: "FAIL! They see straight through thy silver tongue! <i>'To sleep, perchance to scream!'</i> they screech, hitting thee with a wave of psychic feedback. Thou takest 6 psychic damage before they melt into shadows.",
+                choices: [
+                    { text: "Rub thy aching skull and trudge onward to Castle Elsinore.", nextState: 'castle_approach', action: () => takeDamage(6) }
+                ]
+            }
+        },
+        spell_witches: {
+            rollType: 'Arcana (Intelligence)',
+            dc: 11,
+            getMod: () => currentClass === 'Wizard' ? classes.Wizard.bonus : 0,
+            success: {
+                text: "SUCCESS! Thou chantest a complex counter-incantation. The bubbling brew violently boils over, exploding the cauldron into iron shards. The witches are torn apart by their own hex, leaving behind a **Scroll of Prophecy** glowing in the ashes.",
+                choices: [
+                    { text: "Pocket the mystical scroll and continue to Castle Elsinore.", nextState: 'castle_approach', action: () => addInventory("Scroll of Prophecy") }
+                ]
+            },
+            failure: {
+                text: "FAIL! Thy spell misfires, causing the cauldron to erupt in a cloud of blinding poison gas. Thou coughest violently, taking 7 poison damage. The crones disappear into the vapors.",
+                choices: [
+                    { text: "Stumble out of the cloud and flee toward Castle Elsinore.", nextState: 'castle_approach', action: () => takeDamage(7) }
+                ]
+            }
+        },
+        castle_approach: {
+            text: "The jagged walls of Castle Elsinore rise up from the rocky crags. The heavy main gates are locked tight, guarded by a suspicious captain. Up on the freezing high battlements, a glowing, pale **Ghost in royal armor** paces restlessly back and forth.",
+            choices: [
+                { text: "[DEX Sleight of Hand] Slip past the guard and pick the side-door lock.", nextState: 'lock_pick', condition: () => currentClass === 'Rogue' },
+                { text: "[STR Athletics] Forcefully smash thy shoulder into the wooden service door!", nextState: 'gate_smash' },
+                { text: "[Item Conditional] Call up to the Ghost using the Scroll of Prophecy!", nextState: 'ghost_scroll', condition: () => inventory.includes("Scroll of Prophecy") },
+                { text: "[Item Conditional] Drink thy Healing Elixir to restore 10 HP.", nextState: 'castle_approach', condition: () => inventory.includes("Healing Elixir"), action: () => { hp = Math.min(maxHp, hp + 10); inventory = inventory.filter(i => i !== "Healing Elixir"); updateStatsBar(); } },
+                { text: "Confront the guard captain head-on.", nextState: 'guard_fight' }
+            ]
+        },
+        lock_pick: {
+            rollType: 'Sleight of Hand (Dexterity)',
+            dc: 10,
+            getMod: () => classes.Rogue.bonus,
+            success: {
+                text: "SUCCESS! Thy lockpicks click cleanly. The side gate swings open silently. Thou slip deep into the inner sanctum undetected, finding an exposed stash containing the legendary **Sun Sword**!",
+                choices: [
+                    { text: "Equip the Sun Sword and enter the Throne Room for the finale!", nextState: 'throne_room', action: () => addInventory("Sun Sword") }
+                ]
+            },
+            failure: {
+                text: "FAIL! The lockpicks snap with a loud 'CRACK!' The guard captain hears the noise and ambushes thee, swinging a heavy halberd! Thou takest 5 damage.",
+                choices: [
+                    { text: "Draw thy weapon and fight back!", nextState: 'guard_fight', action: () => takeDamage(5) }
+                ]
+            }
+        },
+        gate_smash: {
+            rollType: 'Athletics (Strength)',
+            dc: 14,
+            getMod: () => currentClass === 'Paladin' ? classes.Paladin.bonus : 0,
+            success: {
+                text: "SUCCESS! With pure, raw muscle, thou breakest the door off its iron hinges! The shockwave knocks the guard captain unconscious. The path to the inner court is clear.",
+                choices: [
+                    { text: "Stride proudly into the Castle Inner Sanctum.", nextState: 'throne_room' }
+                ]
+            },
+            failure: {
+                text: "FAIL! The oak gate is like solid stone. Thou bruise thy shoulder badly, taking 4 bludgeoning damage. The guards surround thee immediately!",
+                choices: [
+                    { text: "Prepare to fight thy way out!", nextState: 'guard_fight', action: () => takeDamage(4) }
+                ]
+            }
+        },
+        ghost_scroll: {
+            text: "Thou unrollest the Scroll of Prophecy. The ancient runes flash. The Ghost on the battlements freezes, looks down, and flies down to thee! <i>'Revenge my foul and most unnatural murder!'</i> it bellows, imparting spectral wisdom that fully heals thy HP and fills thee with holy vengeance.",
+            choices: [
+                { text: "Empowered by the specter, bypass the gates and descend to the Throne Room!", nextState: 'throne_room', action: () => { hp = maxHp; updateStatsBar(); } }
+            ]
+        },
+        guard_fight: {
+            rollType: 'Melee Combat',
+            dc: 12,
+            getMod: () => classes[currentClass].bonus || 1,
+            success: {
+                text: "SUCCESS! Thy blade-play / magic overwhelms the castle guards. They throw down their weapons and run. The heavy doors swing open.",
+                choices: [
+                    { text: "Step over the discarded shields and enter the Throne Room.", nextState: 'throne_room' }
+                ]
+            },
+            failure: {
+                text: "FAIL! The guard captain lands a heavy blow across thy chest! Thou takest 8 damage before finding a gap to stab him and rush past into the castle.",
+                choices: [
+                    { text: "Bleeding but determined, burst into the Throne Room.", nextState: 'throne_room', action: () => takeDamage(8) }
+                ]
+            }
+        },
+        throne_room: {
+            text: "Thou burst into the opulent Grand Throne Room. There sits the Usurper King, holding a chalice of poisoned wine. A mad prince stands beside him with a venom-tipped rapier. <i>'To be, or not to be... that is the question!'</i> the prince shrieks, charging directly at thee! This is the final showdown!",
+            choices: [
+                { text: "[D20 Final Boss Roll] Engaged in ultimate mortal combat!", nextState: 'final_boss_resolution' },
+                { text: "[Item Conditional] Strike him instantly with the Sun Sword!", nextState: 'sun_sword_victory', condition: () => inventory.includes("Sun Sword") },
+                { text: "[Item Conditional] Expose his treachery using the Silver Dagger!", nextState: 'dagger_victory', condition: () => inventory.includes("Silver Dagger") }
+            ]
+        },
+        sun_sword_victory: {
+            text: "CRITICAL SUCCESS! Thou drawest the radiant Sun Sword. Brilliant light illuminates the dark throne room. The mad prince shielding his eyes trips over his own robes, falling onto his poisoned blade. The Usurper King flees in absolute terror! The kingdom is saved!",
+            choices: [
+                { text: "Play Again / Try another Class", nextState: 'class_select', action: () => resetGame() }
+            ]
+        },
+        dagger_victory: {
+            text: "SUCCESS! Thou brandishest the Silver Crested Dagger. The Prince recognizes the insignia of his murdered father! He stops his attack, turns his blade in fury upon the treacherous Usurper King, and crowns thee the new protector of Dunsinane! <i>'The rest is silence...'</i>",
+            choices: [
+                { text: "Play Again / Try another Class", nextState: 'class_select', action: () => resetGame() }
+            ]
+        },
+        final_boss_resolution: {
+            rollType: 'Ultimate Battle',
+            dc: 13,
+            getMod: () => classes[currentClass].bonus,
+            success: {
+                text: "VICTORY! Against all odds, thy steel / magic strikes true! The mad prince falls, gasping his final words as the court bows to thy power. Thy epic exploit shall live forever in the grandest sonnets written by the Bard!",
+                choices: [
+                    { text: "Celebrate and Play Again!", nextState: 'class_select', action: () => resetGame() }
+                ]
+            },
+            failure: {
+                text: "DEFEAT! The venomous rapier slips past thy defenses. A cold frost spreads through thy veins. As thy eyes grow heavy and dark, thou hearest the distant clapping of a phantom theater audience...",
+                choices: [
+                    { text: "Thy tragic play ends. Try Again?", nextState: 'class_select', action: () => resetGame() }
+                ]
+            }
+        },
+        game_over: {
+            text: "Alas! Thy hit points have fallen to zero. <i>'Good night, sweet prince, and flights of angels sing thee to thy rest!'</i> Thy journey ends in absolute Shakespearean tragedy.",
+            choices: [
+                { text: "Resurrect (Restart Game)", nextState: 'class_select', action: () => resetGame() }
+            ]
+        }
+    };
+
+    function selectClass(className) {
+        currentClass = className;
+        maxHp = classes[className].hp;
+        hp = maxHp;
+        updateStatsBar();
+    }
+
+    function resetGame() {
+        inventory = [];
+        currentState = 'class_select';
+        updateStatsBar();
+    }
+
+    function renderState() {
+        const node = storyNodes[currentState];
+        const log = document.getElementById('dice-log');
+        log.style.display = 'none';
+
+        document.getElementById('story-text').innerHTML = node.text;
+        const container = document.getElementById('choices-container');
+        container.innerHTML = '';
+
+        node.choices.forEach(choice => {
+            if (choice.condition && !choice.condition()) return;
+
+            const button = document.createElement('button');
+            button.className = 'choice-btn';
+            button.innerText = choice.text;
+            button.onclick = () => {
+                if (choice.action) choice.action();
+                handleChoice(choice.nextState);
+            };
+            container.appendChild(button);
+        });
+    }
+
+    function handleChoice(nextState) {
+        const nextNode = storyNodes[nextState];
+
+        if (nextNode && nextNode.rollType) {
+            const baseRoll = Math.floor(Math.random() * 20) + 1;
+            const modifier = nextNode.getMod ? nextNode.getMod() : 0;
+            const totalRoll = baseRoll + modifier;
+            
+            const log = document.getElementById('dice-log');
+            log.style.display = 'block';
+            log.innerHTML = `🎲 d20 Roll [${nextNode.rollType}]: Rolled a ${baseRoll} + ${modifier} Mod = <strong>${totalRoll}</strong> (DC: ${nextNode.dc})`;
+
+            if (totalRoll >= nextNode.dc) {
+                currentState = nextState;
+                storyNodes[currentState].text = nextNode.success.text;
+                storyNodes[currentState].choices = nextNode.success.choices;
+            } else {
+                currentState = nextState;
+                storyNodes[currentState].text = nextNode.failure.text;
+                storyNodes[currentState].choices = nextNode.failure.choices;
+            }
+        } else {
+            currentState = nextState;
+        }
+
+        renderState();
+    }
+
+    // Launch Game
+    renderState();
+</script>
+
+</body>
+</html>
